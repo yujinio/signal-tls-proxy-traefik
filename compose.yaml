@@ -1,0 +1,91 @@
+version: '3'
+
+volumes:
+  certificates:
+    name: certificates
+
+networks:
+  web:
+    name: web
+
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: unless-stopped
+    networks:
+      - web
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+    volumes:
+      - certificates:/certificates
+      - ./data/traefik/config:/config:Z,ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - --ping
+
+      - --log=true
+      - --accesslog=true
+
+      - --global.sendAnonymousUsage=false
+      - --global.checkNewVersion=false
+
+      - --api.dashboard=true
+
+      - --entrypoints.web.address=:80/tcp
+      - --entrypoints.websecure.address=:443/tcp
+
+      - --certificatesResolvers.myresolver.email=your-email@example.com  # FIXME: enter your email here
+      - --certificatesresolvers.myresolver.acme.storage=/certificates/acme.json
+      - --certificatesresolvers.myresolver.acme.httpchallenge=true
+      - --certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web
+      - --certificatesResolvers.myresolver.acme.keyType=EC384
+      # - "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"  # FIXME (OPTIONAL): use staging server for testing
+      
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --providers.file.filename=/config/dynamic.yml
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    labels:
+      traefik.enable: true
+      traefik.docker.network: web
+
+      # FIXME (OPTIONAL): enable dashboard
+      # traefik.http.routers.dashboard.service: api@internal
+      # traefik.http.routers.dashboard.entrypoints: websecure
+      # traefik.http.routers.dashboard.rule: Host(`YOUR_DOMAIN`)  # FIXME: enter your traefik domain here
+      # traefik.http.routers.dashboard.tls: true
+      # traefik.http.routers.dashboard.tls.certresolver: myresolver
+
+  signal-proxy:
+    image: nginx:alpine
+    container_name: signal-proxy
+    restart: unless-stopped
+    networks:
+      - web
+    depends_on:
+      - traefik
+    volumes:
+      - ./data/nginx-relay/nginx.conf:/etc/nginx/nginx.conf:Z,ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; /usr/sbin/nginx -s reload; done & /usr/sbin/nginx -c /etc/nginx/nginx.conf -g \"daemon off;\"'"
+    labels:
+      traefik.enable: true
+      traefik.docker.network: web
+      
+      traefik.tcp.routers.signal-proxy.rule: HostSNI(`YOUR_SIGNAL_PROXY_DOMAIN`)  # FIXME: enter your signal proxy domain here
+      traefik.tcp.routers.signal-proxy.service: signal-proxy
+      traefik.tcp.routers.signal-proxy.entrypoints: websecure
+      traefik.tcp.routers.signal-proxy.tls: true
+      traefik.tcp.routers.signal-proxy.tls.certresolver: myresolver
+      traefik.tcp.services.signal-proxy.loadbalancer.server.port: 4433

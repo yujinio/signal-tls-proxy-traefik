@@ -1,11 +1,11 @@
-# Signal TLS Proxy
+# signal-tls-proxy-behind-traefik
 
 To run a Signal TLS proxy, you will need a host that has ports 80 and 443 available and a domain name that points to that host.
 
-1. Install Docker by following the instructions at https://docs.docker.com/engine/install/
-2. Clone this repository
-3. `./init-certificate.sh`
-4. `docker compose up --detach`
+1. Install docker and docker compose by following the instructions at https://docs.docker.com/engine/install/ (e.g.: `apt update && apt install docker docker-compose-plugin`)
+2. Ensure your current user has access to docker (`adduser $USER docker`)
+3. Clone this repository
+4. Run `docker compose up -d --remove-orphans`
 
 Your proxy is now running! You can share this with the URL `https://signal.tube/#<your_host_name>`
 
@@ -16,8 +16,7 @@ If you've previously run a proxy, please update to the most recent version by pu
 ```shell
 git pull
 docker compose down
-docker compose build
-docker compose up --detach
+docker compose up -d --remove-orphans
 ```
 
 ## Contributions welcome
